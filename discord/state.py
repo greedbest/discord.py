@@ -1921,25 +1921,37 @@ class ConnectionState(Generic[ClientT]):
     def parse_guild_soundboard_sounds_update(
         self, data: gw.GuildSoundBoardSoundsUpdateEvent
     ) -> None:
-        guild_id = int(data["guild_id"])
-        guild = self._get_guild(guild_id)
-        if guild is None:
-            _log.debug(
-                "GUILD_SOUNDBOARD_SOUNDS_UPDATE referencing unknown guild ID: %s. Discarding.",
-                guild_id,
-            )
-            return
-
-        for raw_sound in data["soundboard_sounds"]:
-            sound_id = int(raw_sound["sound_id"])
-            sound = guild.get_soundboard_sound(sound_id)
-            if sound is not None:
-                self._update_and_dispatch_sound_update(sound, raw_sound)
-            else:
-                _log.warning(
-                    "GUILD_SOUNDBOARD_SOUNDS_UPDATE referencing unknown sound ID: %s. Discarding.",
-                    sound_id,
+        try:
+            guild_id = int(str(data["guild_id"])) 
+            guild = self._get_guild(guild_id)
+            if guild is None:
+                _log.debug(
+                    "GUILD_SOUNDBOARD_SOUNDS_UPDATE referencing unknown guild ID: %s. Discarding.",
+                    guild_id,
                 )
+                return
+
+            for raw_sound in data.get("soundboard_sounds", []):
+                if not isinstance(raw_sound, dict):
+                    _log.debug("Malformed sound data (not a dictionary): %s", raw_sound)
+                    continue
+                    
+                try:
+                    sound_id = int(str(raw_sound["sound_id"])) 
+                    sound = guild.get_soundboard_sound(sound_id)
+                    if sound is not None:
+                        self._update_and_dispatch_sound_update(sound, raw_sound)
+                    else:
+                        _log.debug(
+                            "GUILD_SOUNDBOARD_SOUNDS_UPDATE referencing unknown sound ID: %s. Discarding.",
+                            sound_id,
+                        )
+                except (KeyError, ValueError, TypeError) as e:
+                    _log.debug("Error processing sound data: %s", e)
+                    continue
+
+        except (KeyError, ValueError, TypeError) as e:
+            _log.debug("Received malformed soundboard update: %s, error: %s", data, e)
 
     def parse_application_command_permissions_update(
         self, data: GuildApplicationCommandPermissionsPayload
