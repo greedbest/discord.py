@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+import random
 
 import aiohttp
 import yarl
@@ -108,6 +110,10 @@ class Shard:
             aiohttp.ClientError,
             asyncio.TimeoutError,
         )
+        self._max_reconnect_attempts = 5
+        self._reconnect_counter = 0
+        self._last_reconnect_time = 0
+        self._min_reconnect_interval = 30  
 
     @property
     def id(self) -> int:
@@ -130,8 +136,10 @@ class Shard:
         self._dispatch('shard_disconnect', self.id)
 
     async def _handle_disconnect(self, e: Exception) -> None:
+        current_time = time.time()
         self._dispatch('disconnect')
         self._dispatch('shard_disconnect', self.id)
+
         if not self._reconnect:
             self._queue_put(EventItem(EventType.close, self, e))
             return
@@ -140,7 +148,7 @@ class Shard:
             return
 
         if isinstance(e, OSError) and e.errno in (54, 10054):
-            # If we get Connection reset by peer then always try to RESUME the connection.
+            # Connection reset by peer, attempt immediate resume
             exc = ReconnectWebSocket(self.id, resume=True)
             self._queue_put(EventItem(EventType.resume, self, exc))
             return
@@ -149,13 +157,38 @@ class Shard:
             if e.code == 4014:
                 self._queue_put(EventItem(EventType.terminate, self, PrivilegedIntentsRequired(self.id)))
                 return
-            if e.code != 1000:
+                
+            if e.code in (4000, 4001, 4002, 4003, 4005, 4007, 4008, 4009):
                 self._queue_put(EventItem(EventType.close, self, e))
                 return
+                
+            if e.code == 4004: 
+                _log.error('Invalid token for shard ID %s. Too many invalid requests?', self.id)
+                self._queue_put(EventItem(EventType.terminate, self, e))
+                return
 
-        retry = self._backoff.delay()
-        _log.error('Attempting a reconnect for shard ID %s in %.2fs', self.id, retry, exc_info=e)
-        await asyncio.sleep(retry)
+        time_since_last = current_time - self._last_reconnect_time
+        if time_since_last < self._min_reconnect_interval:
+            await asyncio.sleep(self._min_reconnect_interval - time_since_last)
+
+        self._reconnect_counter += 1
+        if self._reconnect_counter > self._max_reconnect_attempts:
+            _log.error('Maximum reconnection attempts (%d) reached for shard ID %s', 
+                      self._max_reconnect_attempts, self.id)
+            self._queue_put(EventItem(EventType.terminate, self, 
+                           Exception(f"Max reconnection attempts reached for shard {self.id}")))
+            return
+
+        base_delay = self._backoff.delay()
+        jitter = random.uniform(0, 2)  
+        retry_after = base_delay + jitter
+
+        _log.warning('Attempting reconnect %d/%d for shard ID %s in %.2fs', 
+                    self._reconnect_counter, self._max_reconnect_attempts, 
+                    self.id, retry_after)
+
+        self._last_reconnect_time = current_time
+        await asyncio.sleep(retry_after)
         self._queue_put(EventItem(EventType.reconnect, self, e))
 
     async def worker(self) -> None:
@@ -179,43 +212,85 @@ class Shard:
         self._cancel_task()
         self._dispatch('disconnect')
         self._dispatch('shard_disconnect', self.id)
+        
         _log.debug('Got a request to %s the websocket at Shard ID %s.', exc.op, self.id)
-        try:
-            coro = DiscordWebSocket.from_client(
-                self._client,
-                resume=exc.resume,
-                gateway=None if not exc.resume else self.ws.gateway,
-                shard_id=self.id,
-                session=self.ws.session_id,
-                sequence=self.ws.sequence,
-            )
-            self.ws = await asyncio.wait_for(coro, timeout=60.0)
-        except self._handled_exceptions as e:
-            await self._handle_disconnect(e)
-        except ReconnectWebSocket as e:
-            _log.debug('Somehow got a signal to %s while trying to %s shard ID %s.', e.op, exc.op, self.id)
-            op = EventType.resume if e.resume else EventType.identify
-            self._queue_put(EventItem(op, self, e))
-        except asyncio.CancelledError:
-            return
-        except Exception as e:
-            self._queue_put(EventItem(EventType.terminate, self, e))
-        else:
-            self.launch()
+        
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                coro = DiscordWebSocket.from_client(
+                    self._client,
+                    resume=exc.resume,
+                    gateway=None if not exc.resume else self.ws.gateway,
+                    shard_id=self.id,
+                    session=self.ws.session_id if exc.resume else None,
+                    sequence=self.ws.sequence if exc.resume else None,
+                )
+                
+                self.ws = await asyncio.wait_for(coro, timeout=60.0)
+                self._reconnect_counter = 0  
+                break
+                
+            except asyncio.TimeoutError:
+                retry_count += 1
+                if retry_count >= max_retries:
+                    raise
+                await asyncio.sleep(5 * retry_count)  
+                
+            except self._handled_exceptions as e:
+                await self._handle_disconnect(e)
+                return
+                
+            except ReconnectWebSocket as e:
+                _log.debug('Received %s while trying to %s shard ID %s.', 
+                          e.op, exc.op, self.id)
+                op = EventType.resume if e.resume else EventType.identify
+                self._queue_put(EventItem(op, self, e))
+                return
+                
+            except asyncio.CancelledError:
+                return
+                
+            except Exception as e:
+                self._queue_put(EventItem(EventType.terminate, self, e))
+                return
+        
+        self.launch()
 
     async def reconnect(self) -> None:
         self._cancel_task()
-        try:
-            coro = DiscordWebSocket.from_client(self._client, shard_id=self.id)
-            self.ws = await asyncio.wait_for(coro, timeout=60.0)
-        except self._handled_exceptions as e:
-            await self._handle_disconnect(e)
-        except asyncio.CancelledError:
-            return
-        except Exception as e:
-            self._queue_put(EventItem(EventType.terminate, self, e))
-        else:
-            self.launch()
+        backoff = ExponentialBackoff()
+        max_retries = 5
+        retry_count = 0
+
+        while retry_count < max_retries:
+            try:
+                coro = DiscordWebSocket.from_client(self._client, shard_id=self.id)
+                self.ws = await asyncio.wait_for(coro, timeout=60.0)
+                self._reconnect_counter = 0  
+                break
+            
+            except (*self._handled_exceptions, asyncio.TimeoutError) as e:
+                retry_count += 1
+                if retry_count >= max_retries:
+                    await self._handle_disconnect(e)
+                    return
+                    
+                delay = backoff.delay()
+                _log.warning('Reconnect attempt %d/%d failed for shard ID %s. Retrying in %.2fs',
+                            retry_count, max_retries, self.id, delay)
+                await asyncio.sleep(delay)
+                
+            except asyncio.CancelledError:
+                return
+                
+            except Exception as e:
+                self._queue_put(EventItem(EventType.terminate, self, e))
+                return
+
+        self.launch()
 
 
 class ShardInfo:
