@@ -2319,3 +2319,31 @@ class AutoShardedConnectionState(ConnectionState[ClientT]):
     def parse_resumed(self, data: gw.ResumedEvent) -> None:
         self.dispatch("resumed")
         self.dispatch("shard_resumed", data["__shard_id__"])  # type: ignore # This is an internal discord.py key
+
+
+def _channel_factory(channel_type: int) -> Tuple[Optional[Type[Channel]], int]:
+    from .channel import (
+        TextChannel, VoiceChannel, StageChannel, CategoryChannel,
+        Thread, ForumChannel
+    )
+    
+    if channel_type == ChannelType.text.value:
+        return TextChannel, channel_type
+    elif channel_type == ChannelType.voice.value:
+        return VoiceChannel, channel_type
+    elif channel_type == ChannelType.category.value:
+        return CategoryChannel, channel_type
+    elif channel_type == ChannelType.news.value:
+        return TextChannel, channel_type  
+    elif channel_type == ChannelType.stage_voice.value:
+        return StageChannel, channel_type
+    elif channel_type == ChannelType.forum.value:
+        return ForumChannel, channel_type
+    elif channel_type in (
+        ChannelType.public_thread.value,
+        ChannelType.private_thread.value,
+        ChannelType.news_thread.value,
+    ):
+        return Thread, channel_type
+    else:
+        return None, channel_type
