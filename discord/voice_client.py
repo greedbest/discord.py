@@ -653,7 +653,7 @@ class VoiceClient(VoiceProtocol):
                 try:
                     decoded = self.decoder.decode(bytes(audio_data), fec=False)
                 except Exception as e:
-                    _log.debug(f"Failed to decode opus packet: {e}")
+                    _log.info(f"Failed to decode opus packet: {e}")
                     return
 
                 if len(decoded) > 0:  
@@ -661,7 +661,7 @@ class VoiceClient(VoiceProtocol):
                         decoded = audioop.tostereo(decoded, 2, 1, 1)
                     self._wav_file.writeframes(decoded)
             except Exception as e:
-                _log.error(f"Error in audio callback: {e}")
+                _log.info(f"Error in audio callback: {e}")
 
         self.add_socket_listener(audio_callback)
 
