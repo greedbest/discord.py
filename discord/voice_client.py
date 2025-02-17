@@ -648,15 +648,28 @@ class VoiceClient(VoiceProtocol):
             try:
                 if len(data) < 12:  
                     return
-                audio_data = data[12:]
+                    
+                header = data[:12]
+                encrypted_audio = data[12:]
+                
+                _log.info(f"Current encryption mode: {self.mode}")
+                decrypt_func = getattr(self, '_decrypt_' + self.mode)
+                _log.info(f"Using decryption function: {decrypt_func.__name__}")
                 
                 try:
-                    decoded = self.decoder.decode(bytes(audio_data), fec=False)
+                    decrypted_audio = decrypt_func(header, encrypted_audio)
+                    _log.debug(f"Successfully decrypted audio packet of length {len(decrypted_audio)}")
+                except Exception as e:
+                    _log.info(f"Failed to decrypt audio: {e}")
+                    return
+                
+                try:
+                    decoded = self.decoder.decode(decrypted_audio, fec=False)
                 except Exception as e:
                     _log.info(f"Failed to decode opus packet: {e}")
                     return
 
-                if len(decoded) > 0:  
+                if len(decoded) > 0:
                     if len(decoded) == 1:
                         decoded = audioop.tostereo(decoded, 2, 1, 1)
                     self._wav_file.writeframes(decoded)
@@ -686,3 +699,24 @@ class VoiceClient(VoiceProtocol):
             
         key_id, _ = self.channel._get_voice_client_key()
         self.client._connection._remove_voice_client(key_id)
+
+    def _decrypt_aead_xchacha20_poly1305_rtpsize(self, header: bytes, data: bytes) -> bytes:
+        box = nacl.secret.Aead(bytes(self.secret_key))
+        nonce = data[-4:] 
+        return box.decrypt(data[:-4], header, nonce.ljust(24, b'\x00'))  
+
+    def _decrypt_xsalsa20_poly1305_lite(self, header: bytes, data: bytes) -> bytes:
+        box = nacl.secret.SecretBox(bytes(self.secret_key))
+        nonce = data[-4:]
+        return box.decrypt(data[:-4], nonce.ljust(24, b'\x00'))
+
+    def _decrypt_xsalsa20_poly1305_suffix(self, header: bytes, data: bytes) -> bytes:
+        box = nacl.secret.SecretBox(bytes(self.secret_key))
+        nonce = data[-24:]
+        return box.decrypt(data[:-24], nonce)
+
+    def _decrypt_xsalsa20_poly1305(self, header: bytes, data: bytes) -> bytes:
+        box = nacl.secret.SecretBox(bytes(self.secret_key))
+        nonce = bytearray(24)
+        nonce[:12] = header
+        return box.decrypt(data, bytes(nonce))
