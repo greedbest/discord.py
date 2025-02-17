@@ -707,16 +707,22 @@ class VoiceClient(VoiceProtocol):
             _log.info(f"Decryption attempt - Header length: {len(header)}, Data length: {len(data)}, Nonce length: {len(nonce)}")
             _log.info(f"Secret key length: {len(self.secret_key)}")
             
+            full_nonce = bytearray(24)
+            full_nonce[:4] = nonce 
+            
             ciphertext = data[:-4]
             
-            full_nonce = nonce.ljust(24, b'\x00')
+            _log.info(f"Ciphertext length: {len(ciphertext)}")
+            _log.info(f"Full nonce length: {len(full_nonce)}")
             
-            return box.decrypt(ciphertext, header, full_nonce)
+            return box.decrypt(ciphertext, header, bytes(full_nonce))
             
         except Exception as e:
             _log.info(f"Detailed decryption error: {str(e)}")
+            _log.info(f"Header (hex): {header.hex()}")
             _log.info(f"Secret key: {self.secret_key}")
             _log.info(f"Nonce (hex): {nonce.hex()}")
+            _log.info(f"Full nonce (hex): {full_nonce.hex()}")
             raise
 
     def _decrypt_xsalsa20_poly1305_lite(self, header: bytes, data: bytes) -> bytes:
