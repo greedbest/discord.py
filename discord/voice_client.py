@@ -178,18 +178,18 @@ class VoiceProtocol:
         """
         raise NotImplementedError
 
-    def cleanup(self) -> None:
-        """This method *must* be called to ensure proper clean-up during a disconnect.
+    # def cleanup(self) -> None:
+    #     """This method *must* be called to ensure proper clean-up during a disconnect.
 
-        It is advisable to call this from within :meth:`disconnect` when you are
-        completely done with the voice protocol instance.
+    #     It is advisable to call this from within :meth:`disconnect` when you are
+    #     completely done with the voice protocol instance.
 
-        This method removes it from the internal state cache that keeps track of
-        currently alive voice clients. Failure to clean-up will cause subsequent
-        connections to report that it's still connected.
-        """
-        key_id, _ = self.channel._get_voice_client_key()
-        self.client._connection._remove_voice_client(key_id)
+    #     This method removes it from the internal state cache that keeps track of
+    #     currently alive voice clients. Failure to clean-up will cause subsequent
+    #     connections to report that it's still connected.
+    #     """
+    #     key_id, _ = self.channel._get_voice_client_key()
+    #     self.client._connection._remove_voice_client(key_id)
 
 
 class VoiceClient(VoiceProtocol):
@@ -663,5 +663,10 @@ class VoiceClient(VoiceProtocol):
         self._wav_file = None
         self._recording_file = None
 
-    async def cleanup(self) -> None:
-        await self.stop_recording()
+    def cleanup(self) -> None:
+        """This method *must* be called to ensure proper clean-up during a disconnect."""
+        if self._recording:
+            self.stop()  
+            
+        key_id, _ = self.channel._get_voice_client_key()
+        self.client._connection._remove_voice_client(key_id)
