@@ -46,7 +46,7 @@ if TYPE_CHECKING:
     from .guild import Guild
     from .state import ConnectionState
     from .user import ClientUser
-    from .opus import Encoder, APPLICATION_CTL, BAND_CTL, SIGNAL_CTL, Decoder
+    from .opus import Encoder, Decoder, APPLICATION_CTL, BAND_CTL, SIGNAL_CTL
     from .channel import StageChannel, VoiceChannel
     from . import abc
 
@@ -638,7 +638,7 @@ class VoiceClient(VoiceProtocol):
         self._wav_file.setsampwidth(2)  
         self._wav_file.setframerate(48000)  
 
-        self.decoder = Decoder()  
+        self.decoder = opus.Decoder()  
         
         def audio_callback(data: bytes) -> None:
             if self._recording and self._wav_file and self.decoder:
