@@ -701,9 +701,23 @@ class VoiceClient(VoiceProtocol):
         self.client._connection._remove_voice_client(key_id)
 
     def _decrypt_aead_xchacha20_poly1305_rtpsize(self, header: bytes, data: bytes) -> bytes:
-        box = nacl.secret.Aead(bytes(self.secret_key))
-        nonce = data[-4:] 
-        return box.decrypt(data[:-4], header, nonce.ljust(24, b'\x00'))  
+        try:
+            box = nacl.secret.Aead(bytes(self.secret_key))
+            nonce = data[-4:]
+            _log.info(f"Decryption attempt - Header length: {len(header)}, Data length: {len(data)}, Nonce length: {len(nonce)}")
+            _log.info(f"Secret key length: {len(self.secret_key)}")
+            
+            ciphertext = data[:-4]
+            
+            full_nonce = nonce.ljust(24, b'\x00')
+            
+            return box.decrypt(ciphertext, header, full_nonce)
+            
+        except Exception as e:
+            _log.info(f"Detailed decryption error: {str(e)}")
+            _log.info(f"Secret key: {self.secret_key}")
+            _log.info(f"Nonce (hex): {nonce.hex()}")
+            raise
 
     def _decrypt_xsalsa20_poly1305_lite(self, header: bytes, data: bytes) -> bytes:
         box = nacl.secret.SecretBox(bytes(self.secret_key))
