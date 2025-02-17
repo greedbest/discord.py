@@ -27,8 +27,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
-from typing import Any, Callable, List, Optional, TYPE_CHECKING, Tuple, Union, Dict, BinaryIO
-import time
+from typing import Any, Callable, List, Optional, TYPE_CHECKING, Tuple, Union
 
 from . import opus
 from .gateway import *
@@ -36,9 +35,6 @@ from .errors import ClientException
 from .player import AudioPlayer, AudioSource
 from .utils import MISSING
 from .voice_state import VoiceConnectionState
-import wave
-import audioop
-from pathlib import Path
 
 if TYPE_CHECKING:
     from .gateway import DiscordVoiceWebSocket
@@ -46,7 +42,7 @@ if TYPE_CHECKING:
     from .guild import Guild
     from .state import ConnectionState
     from .user import ClientUser
-    from .opus import Encoder, APPLICATION_CTL, BAND_CTL, SIGNAL_CTL, Decoder
+    from .opus import Encoder, APPLICATION_CTL, BAND_CTL, SIGNAL_CTL
     from .channel import StageChannel, VoiceChannel
     from . import abc
 
@@ -178,18 +174,18 @@ class VoiceProtocol:
         """
         raise NotImplementedError
 
-    # def cleanup(self) -> None:
-    #     """This method *must* be called to ensure proper clean-up during a disconnect.
+    def cleanup(self) -> None:
+        """This method *must* be called to ensure proper clean-up during a disconnect.
 
-    #     It is advisable to call this from within :meth:`disconnect` when you are
-    #     completely done with the voice protocol instance.
+        It is advisable to call this from within :meth:`disconnect` when you are
+        completely done with the voice protocol instance.
 
-    #     This method removes it from the internal state cache that keeps track of
-    #     currently alive voice clients. Failure to clean-up will cause subsequent
-    #     connections to report that it's still connected.
-    #     """
-    #     key_id, _ = self.channel._get_voice_client_key()
-    #     self.client._connection._remove_voice_client(key_id)
+        This method removes it from the internal state cache that keeps track of
+        currently alive voice clients. Failure to clean-up will cause subsequent
+        connections to report that it's still connected.
+        """
+        key_id, _ = self.channel._get_voice_client_key()
+        self.client._connection._remove_voice_client(key_id)
 
 
 class VoiceClient(VoiceProtocol):
@@ -219,14 +215,6 @@ class VoiceClient(VoiceProtocol):
 
     channel: VocalGuildChannel
 
-    def add_socket_listener(self, callback: Callable[[bytes], None]) -> None:
-        """Add a callback for receiving voice data."""
-        self._connection.add_socket_listener(callback)
-
-    def remove_socket_listener(self, callback: Callable[[bytes], None]) -> None:
-        """Remove a voice data callback."""
-        self._connection.remove_socket_listener(callback)
-
     def __init__(self, client: Client, channel: abc.Connectable) -> None:
         if not has_nacl:
             raise RuntimeError("PyNaCl library needed in order to use voice")
@@ -243,13 +231,8 @@ class VoiceClient(VoiceProtocol):
         self._player: Optional[AudioPlayer] = None
         self.encoder: Encoder = MISSING
         self._incr_nonce: int = 0
-        self.decoder: Optional[Decoder] = None
 
         self._connection: VoiceConnectionState = self.create_connection_state()
-        self._recording: bool = False
-        self._recording_file: Optional[BinaryIO] = None
-        self._wav_file: Optional[wave.Wave_write] = None
-        self._recorded_users: Dict[int, BinaryIO] = {}
 
     warn_nacl: bool = not has_nacl
     supported_modes: Tuple[SupportedModes, ...] = (
@@ -396,17 +379,7 @@ class VoiceClient(VoiceProtocol):
         struct.pack_into('>I', header, 8, self.ssrc)
 
         encrypt_packet = getattr(self, '_encrypt_' + self.mode)
-        packet = encrypt_packet(header, data)
-
-        if self._recording and self.encoder:
-            try:
-                decoded = self.encoder.decode(data)
-                if self._wav_file:
-                    self._wav_file.writeframes(decoded)
-            except Exception as e:
-                _log.error(f"Error recording audio: {e}")
-
-        return packet
+        return encrypt_packet(header, data)
 
     def _encrypt_aead_xchacha20_poly1305_rtpsize(self, header: bytes, data) -> bytes:
         # Esentially the same as _lite
@@ -616,57 +589,3 @@ class VoiceClient(VoiceProtocol):
             _log.debug('A packet has been dropped (seq: %s, timestamp: %s)', self.sequence, self.timestamp)
 
         self.checked_add('timestamp', opus.Encoder.SAMPLES_PER_FRAME, 4294967295)
-
-    async def start_recording(self, path: Optional[str] = None) -> None:
-        """Start recording audio from the voice channel.
-        
-        Parameters
-        -----------
-        path: Optional[:class:`str`]
-            The path to save the recording. If None, uses a default path.
-        """
-        if self._recording:
-            raise ClientException('Already recording audio.')
-
-        if not path:
-            path = f'recording_{int(time.time())}.wav'
-
-        self._recording = True
-        self._recording_file = open(path, 'wb')
-        self._wav_file = wave.open(self._recording_file, 'wb')
-        self._wav_file.setnchannels(2)
-        self._wav_file.setsampwidth(2)  
-        self._wav_file.setframerate(48000)  
-
-        self.decoder = Decoder()  
-        
-        def audio_callback(data: bytes) -> None:
-            if self._recording and self._wav_file and self.decoder:
-                decoded = self.decoder.decode(bytes(data), fec=False)
-                if len(decoded) == 1:
-                    decoded = audioop.tostereo(decoded, 2, 1, 1)
-                self._wav_file.writeframes(decoded)
-
-        self.add_socket_listener(audio_callback)
-
-    async def stop_recording(self) -> None:
-        """Stop recording and save the audio file."""
-        if not self._recording:
-            return
-
-        self._recording = False
-        if self._wav_file:
-            self._wav_file.close()
-        if self._recording_file:
-            self._recording_file.close()
-
-        self._wav_file = None
-        self._recording_file = None
-
-    def cleanup(self) -> None:
-        """This method *must* be called to ensure proper clean-up during a disconnect."""
-        if self._recording:
-            self.stop()  
-            
-        key_id, _ = self.channel._get_voice_client_key()
-        self.client._connection._remove_voice_client(key_id)

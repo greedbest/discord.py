@@ -398,44 +398,30 @@ class VoiceConnectionState:
     async def _inner_connect(self, reconnect: bool, self_deaf: bool, self_mute: bool, resume: bool) -> None:
         for i in range(5):
             _log.info('Starting voice handshake... (connection attempt %d)', i + 1)
-            
+
+            await self._voice_connect(self_deaf=self_deaf, self_mute=self_mute)
+            # Setting this unnecessarily will break reconnecting
+            if self.state is ConnectionFlowState.disconnected:
+                self.state = ConnectionFlowState.set_guild_voice_state
+
+            await self._wait_for_state(ConnectionFlowState.got_both_voice_updates)
+
+            _log.info('Voice handshake complete. Endpoint found: %s', self.endpoint)
+
             try:
-                _log.debug('Current state before voice connect: %s', self.state.name)
-                
-                await self._voice_connect(self_deaf=self_deaf, self_mute=self_mute)
-                _log.debug('Voice connect completed, current state: %s', self.state.name)
-                
-                if self.state is ConnectionFlowState.disconnected:
-                    self.state = ConnectionFlowState.set_guild_voice_state
-                    _log.debug('Set initial state to: %s', self.state.name)
-
-                _log.debug('Waiting for voice updates...')
-                await self._wait_for_state(ConnectionFlowState.got_both_voice_updates)
-                _log.debug('Received voice updates, endpoint: %s', self.endpoint)
-
                 self.ws = await self._connect_websocket(resume)
-                _log.debug('Voice websocket connected')
-                
                 await self._handshake_websocket()
-                _log.debug('Voice handshake completed successfully')
                 break
-                
-            except ConnectionClosed as e:
-                _log.warning('Connection closed during handshake (code: %s, reason: %s)', 
-                            e.code, e.reason or 'No reason provided')
-                
+            except ConnectionClosed:
                 if reconnect:
                     wait = 1 + i * 2.0
-                    _log.info('Failed to connect to voice... Retrying in %ss...', wait)
+                    _log.exception('Failed to connect to voice... Retrying in %ss...', wait)
                     await self.disconnect(cleanup=False)
                     await asyncio.sleep(wait)
                     continue
                 else:
                     await self.disconnect()
                     raise
-            except Exception as e:
-                _log.error('Unexpected error during voice handshake: %s', e, exc_info=True)
-                raise
 
     async def _connect(self, reconnect: bool, timeout: float, self_deaf: bool, self_mute: bool, resume: bool) -> None:
         _log.info('Connecting to voice...')
