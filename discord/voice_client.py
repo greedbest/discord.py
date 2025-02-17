@@ -638,7 +638,8 @@ class VoiceClient(VoiceProtocol):
         self._wav_file.setsampwidth(2)  
         self._wav_file.setframerate(48000)  
 
-        self.decoder = opus.Decoder()  
+        if self.decoder is None:  
+            self.decoder = opus.Decoder()
         
         def audio_callback(data: bytes) -> None:
             if self._recording and self._wav_file and self.decoder:
