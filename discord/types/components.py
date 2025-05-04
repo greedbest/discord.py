@@ -24,7 +24,7 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
-from typing import List, Literal, TypedDict, Union
+from typing import List, Literal, TypedDict, Union, Optional
 from typing_extensions import NotRequired
 
 from .emoji import PartialEmoji
@@ -120,3 +120,53 @@ class SelectMenu(SelectComponent):
 
 ActionRowChildComponent = Union[ButtonComponent, SelectMenu, TextInput]
 Component = Union[ActionRow, ActionRowChildComponent]
+
+class SectionComponent(TypedDict):
+    type: Literal[9]
+    id: Optional[int]
+    components: List[Union['TextDisplayComponent', 'Component']]
+    accessory: Optional[Union['ButtonComponent', 'ThumbnailComponent']]
+
+class TextDisplayComponent(TypedDict):
+    type: Literal[10]
+    content: str
+
+class ThumbnailComponent(TypedDict):
+    type: Literal[11]
+    url: str
+    height: Optional[int]
+    width: Optional[int]
+
+class MediaGalleryItem(TypedDict):
+    media: UnfurledMediaItem
+    description: NotRequired[str]
+    spoiler: NotRequired[bool]
+
+class UnfurledMediaItem(TypedDict):
+    url: str
+
+class MediaGalleryComponent(TypedDict):
+    type: Literal[12]
+    id: NotRequired[int]
+    items: List[MediaGalleryItem]
+
+class FileComponent(TypedDict):
+    type: Literal[13]
+    id: NotRequired[int]
+    file: UnfurledMediaItem
+    spoiler: NotRequired[bool]
+
+class SeparatorComponent(TypedDict):
+    type: Literal[14]
+    id: NotRequired[int]
+    divider: NotRequired[bool]
+    spacing: NotRequired[Literal[1, 2]]
+
+class ContainerComponent(TypedDict):
+    type: Literal[17]
+    id: NotRequired[int]
+    components: List[Union[ActionRow, TextDisplayComponent, SectionComponent, MediaGalleryComponent, SeparatorComponent, FileComponent]]
+    accent_color: NotRequired[int]
+    spoiler: NotRequired[bool]
+
+ComponentV2 = Union[SectionComponent, TextDisplayComponent, ThumbnailComponent, MediaGalleryComponent, FileComponent, SeparatorComponent, ContainerComponent]

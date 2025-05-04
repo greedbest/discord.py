@@ -5743,3 +5743,105 @@ Exception Hierarchy
                 - :exc:`DiscordServerError`
                 - :exc:`app_commands.CommandSyncFailure`
             - :exc:`RateLimited`
+
+.. _discord_api_components_v2:
+
+Components V2
+------------
+
+.. module:: discord.components_v2
+
+Components V2 is Discord's enhanced message layout system that provides more control over message appearance and structure.
+This system is opt-in and can be enabled by setting the :attr:`MessageFlags.IS_COMPONENTS_V2` flag.
+
+.. note::
+    Components V2 is a separate system from the legacy components. When enabled:
+    
+    - Regular message content and embeds are disabled
+    - Attachments must be explicitly shown using the File component
+    - Poll and sticker features are disabled
+    - Legacy components need proper wrapping in V2 containers
+
+.. class:: Section
+    
+    Represents a section component that can contain text and an optional accessory.
+
+    .. attribute:: components
+        
+        List[:class:`TextDisplay`]: The text components in this section.
+
+    .. attribute:: accessory
+        
+        Optional[Union[:class:`Button`, :class:`Thumbnail`]]: The accessory component, if any.
+
+    .. attribute:: id
+        
+        Optional[:class:`int`]: The identifier for this section.
+
+.. class:: TextDisplay
+
+    Represents a text display component with markdown support.
+
+    .. attribute:: content
+
+        :class:`str`: The text content being displayed.
+
+    .. attribute:: id
+
+        Optional[:class:`int`]: The identifier for this component.
+
+.. class:: Container
+
+    Represents a container that can group components with optional styling.
+
+    .. attribute:: components
+
+        List[Union[:class:`ActionRow`, :class:`TextDisplay`, :class:`Section`, :class:`MediaGallery`, :class:`Separator`, :class:`File`]]: The components in this container.
+
+    .. attribute:: accent_color
+
+        Optional[:class:`int`]: The accent color of the container.
+
+    .. attribute:: spoiler
+
+        :class:`bool`: Whether the container is marked as a spoiler.
+
+    .. attribute:: id
+
+        Optional[:class:`int`]: The identifier for this component.
+
+.. class:: Thumbnail
+
+    Represents a thumbnail component for small images.
+
+    .. attribute:: media_url
+
+        :class:`str`: The URL of the media being displayed.
+
+    .. attribute:: description
+
+        Optional[:class:`str`]: Alt text for the media.
+
+    .. attribute:: spoiler
+
+        :class:`bool`: Whether the thumbnail is marked as a spoiler.
+
+    .. attribute:: id
+
+        Optional[:class:`int`]: The identifier for this component.
+
+.. class:: File
+
+    Represents a file component for displaying attachments.
+
+    .. attribute:: filename
+
+        :class:`str`: The name of the file being referenced.
+
+    .. attribute:: spoiler
+
+        :class:`bool`: Whether the file is marked as a spoiler.
+
+    .. attribute:: id
+
+        Optional[:class:`int`]: The identifier for this component.

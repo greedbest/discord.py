@@ -1671,3 +1671,37 @@ Bug Fixes
 - Fix issue when a :class:`Message` would attempt to upgrade a :attr:`Message.server` when the channel is
   a :class:`Object`.
 - Unavailable servers were not being added into cache, this has been corrected.
+
+Components V2 Support
+~~~~~~~~~~~~~~~~~~
+
+Discord's Components V2 system is now supported, providing enhanced message layout and styling options. This system is opt-in
+and can be enabled by setting the :attr:`MessageFlags.IS_COMPONENTS_V2` flag. New component types include:
+
+- Section (type 9): Layout component for text with accessories
+- TextDisplay (type 10): Text content with markdown support
+- Thumbnail (type 11): Small images for section accessories
+- MediaGallery (type 12): Gallery for 1-10 media items
+- File (type 13): File attachment display
+- Separator (type 14): Visual divider with spacing options
+- Container (type 17): Top-level layout with accent colors
+
+Example usage:
+
+.. code-block:: python
+
+    from discord import MessageFlags
+    from discord.components_v2 import Section, TextDisplay, Container
+
+    # Create V2 components
+    text = TextDisplay(content="Hello World")
+    section = Section(components=[text])
+    container = Container(components=[section])
+
+    # Send message with V2 components
+    await channel.send(
+        components=[container],
+        flags=MessageFlags.IS_COMPONENTS_V2
+    )
+
+For more information, see :ref:`discord_api_components_v2`.

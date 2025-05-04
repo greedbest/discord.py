@@ -900,3 +900,110 @@ Exception Hierarchy
             - :exc:`~discord.app_commands.CommandSyncFailure`
         - :exc:`~discord.HTTPException`
             - :exc:`~discord.app_commands.CommandSyncFailure`
+
+Components V2
+~~~~~~~~~~~~
+
+Discord's Components V2 system provides enhanced layout and styling options for messages. This system is opt-in and can be enabled
+by setting the :attr:`MessageFlags.IS_COMPONENTS_V2` flag when sending a message.
+
+.. note::
+    When Components V2 is enabled:
+    
+    - Regular message content and embeds are disabled
+    - Attachments must be explicitly shown using the File component
+    - Poll and sticker features are disabled
+    - Legacy components need proper wrapping in V2 containers
+
+Example Usage:
+
+.. code-block:: python
+
+    from discord import MessageFlags
+    from discord.components_v2 import Section, TextDisplay, Container
+
+    # Create V2 components
+    text = TextDisplay(content="Hello World")
+    section = Section(components=[text])
+    container = Container(components=[section])
+
+    # Send message with V2 components
+    await channel.send(
+        components=[container],
+        flags=MessageFlags.IS_COMPONENTS_V2
+    )
+
+Component Types
+--------------
+
+The following component types are available in V2:
+
+Section (type 9)
++++++++++++++++
+A layout component that joins text with an optional accessory.
+
+.. code-block:: python
+
+    section = Section(
+        components=[TextDisplay(content="Hello")],
+        accessory=Button(label="Click me")
+    )
+
+TextDisplay (type 10)
+++++++++++++++++++++
+Displays text content with markdown support.
+
+.. code-block:: python
+
+    text = TextDisplay(content="**Bold** and *italic* text")
+
+Thumbnail (type 11)
+++++++++++++++++++
+Small images that can be used as section accessories.
+
+.. code-block:: python
+
+    thumbnail = Thumbnail(
+        media_url="https://example.com/image.png",
+        description="Alt text"
+    )
+
+MediaGallery (type 12)
+++++++++++++++++++++++
+Gallery for displaying 1-10 media items.
+
+.. code-block:: python
+
+    gallery = MediaGallery(
+        media=[
+            {"url": "https://example.com/image1.png"},
+            {"url": "https://example.com/image2.png"}
+        ]
+    )
+
+File (type 13)
++++++++++++++
+Displays a file attachment.
+
+.. code-block:: python
+
+    file_comp = File(filename="document.pdf")
+
+Separator (type 14)
+++++++++++++++++++
+Visual divider with spacing options.
+
+.. code-block:: python
+
+    separator = Separator(spacing=SeparatorSpacing.MEDIUM)
+
+Container (type 17)
+++++++++++++++++++
+Top-level layout component with optional accent colors.
+
+.. code-block:: python
+
+    container = Container(
+        components=[section],
+        accent_color=0xFF0000
+    )
