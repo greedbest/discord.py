@@ -24,9 +24,10 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 from typing import ClassVar, List, Literal, Optional, TYPE_CHECKING, Tuple, Union, Dict, Any
+from dataclasses import dataclass
 
 from .components import Component, Button
-from .enums import ComponentType
+from .enums import ComponentType, ButtonStyle
 from .utils import MISSING
 
 if TYPE_CHECKING:
@@ -42,7 +43,65 @@ __all__ = (
     'File',
     'SeparatorSpacing',
     'Separator',
+    'ActionRow',
 )
+
+class ActionRow(Component):
+    """Represents an action row component in Discord Bot UI Kit V2.
+    
+    This component is used to group other components in a horizontal row.
+
+    Parameters
+    -----------
+    components: List[Union[:class:`Section`, :class:`Button`]]
+        The components to include in this row.
+    id: Optional[:class:`int`]
+        The identifier for this component.
+
+    Attributes
+    -----------
+    components: List[Union[:class:`Section`, :class:`Button`]]
+        The components in this row.
+    id: Optional[:class:`int`]
+        The identifier for this component, if any.
+    """
+
+    __slots__: Tuple[str, ...] = (
+        'components',
+        'id',
+    )
+
+    __repr_info__: ClassVar[Tuple[str, ...]] = __slots__
+
+    def __init__(
+        self, 
+        *, 
+        components: List[Union[Section, Button]],
+        id: Optional[int] = None
+    ) -> None:
+        if not components:
+            raise ValueError('ActionRow must contain at least one component')
+            
+        if not all(isinstance(comp, (Section, Button)) for comp in components):
+            raise TypeError('All components must be either Section or Button instances')
+        
+        self.components = components
+        self.id = id
+
+    @property
+    def type(self) -> Literal[ComponentType.action_row]:
+        return ComponentType.action_row
+
+    def to_dict(self) -> ComponentPayload:
+        payload = {
+            'type': self.type.value,
+            'components': [component.to_dict() for component in self.components],
+        }
+        
+        if self.id is not None:
+            payload['id'] = self.id
+            
+        return payload
 
 class Section(Component):
     """Represents a Discord Bot UI Kit Section Component (V2).
@@ -172,7 +231,7 @@ class Container(Component):
 
     Parameters
     -----------
-    components: List[Union[:class:`ActionRow`, :class:`TextDisplay`, :class:`Section`, :class:`MediaGallery`, :class:`Separator`, :class:`File`]]
+    components: List[Union[:class:`TextDisplay`, :class:`Section`, :class:`MediaGallery`, :class:`Separator`, :class:`File`]]
         The components to include in this container.
     accent_color: Optional[:class:`int`]
         Color for the accent on the container as RGB from 0x000000 to 0xFFFFFF.
@@ -183,7 +242,7 @@ class Container(Component):
 
     Attributes
     -----------
-    components: List[Union[:class:`ActionRow`, :class:`TextDisplay`, :class:`Section`, :class:`MediaGallery`, :class:`Separator`, :class:`File`]]
+    components: List[Union[:class:`TextDisplay`, :class:`Section`, :class:`MediaGallery`, :class:`Separator`, :class:`File`]]
         The components in this container.
     accent_color: Optional[:class:`int`]
         The accent color of the container, if any.
@@ -205,7 +264,7 @@ class Container(Component):
     def __init__(
         self, 
         *, 
-        components: List[Union[ActionRow, TextDisplay, Section, MediaGallery, Separator, File]],
+        components: List[Union[TextDisplay, Section, MediaGallery, Separator, File]],
         accent_color: Optional[int] = None,
         spoiler: bool = False,
         id: Optional[int] = None
@@ -213,9 +272,9 @@ class Container(Component):
         if not components:
             raise ValueError('Container must contain at least one component')
             
-        valid_types = (ActionRow, TextDisplay, Section, MediaGallery, Separator, File)
+        valid_types = (TextDisplay, Section, MediaGallery, Separator, File)
         if not all(isinstance(comp, valid_types) for comp in components):
-            raise TypeError('All components must be one of: ActionRow, TextDisplay, Section, MediaGallery, Separator, or File')
+            raise TypeError('All components must be one of: TextDisplay, Section, MediaGallery, Separator, or File')
             
         if accent_color is not None and not 0 <= accent_color <= 0xFFFFFF:
             raise ValueError('accent_color must be between 0x000000 and 0xFFFFFF')
